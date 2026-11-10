@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Falling Maple Leaves</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: Georgia, "Times New Roman", serif;
+    background: linear-gradient(180deg, #fdf3e3 0%, #f8e2c4 55%, #f1cfa6 100%);
+    overflow-x: hidden;
+    color: #4a2a17;
+  }
+  #leaves {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+  }
+  /* Your page content goes here, above the leaves */
+  main {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px 16px;
+  }
+  h1 {
+    font-size: clamp(2.4rem, 7vw, 5rem);
+    font-weight: normal;
+    letter-spacing: 0.04em;
+    text-shadow: 0 2px 12px rgba(255, 245, 230, 0.9);
+  }
+  p {
+    margin-top: 12px;
+    font-size: clamp(1rem, 2.5vw, 1.3rem);
+    opacity: 0.8;
+    text-shadow: 0 1px 8px rgba(255, 245, 230, 0.9);
+  }
+</style>
+</head>
+<body>
+<canvas id="leaves"></canvas>
+
+<main>
+  <h1>Autumn</h1>
+  <p>Replace this with your own content.</p>
+</main>
+
+<script>
+(() => {
+  const canvas = document.getElementById('leaves');
+  const ctx = canvas.getContext('2d');
+
+  // Palette: orange, light dark red, light green, dark green
+  const PALETTE = [
+    { base: '#F28C28', dark: '#C9631A' }, // orange
+    { base: '#E8751A', dark: '#B5520F' }, // deep orange
+    { base: '#C0453A', dark: '#8E2A22' }, // light dark red
+    { base: '#A8322A', dark: '#74201A' }, // darker red
+    { base: '#9BC75A', dark: '#6E9A35' }, // light green
+    { base: '#3F7D3A', dark: '#245624' }  // dark green
+  ];
+
+  // Maple leaf outline (centered at 0,0, roughly 100 units tall)
+  const PTS = [
+    [0,-50],[9,-33],[19,-38],[15,-15],[30,-28],[34,-20],[48,-23],[42,-8],
+    [50,-4],[30,12],[34,22],[6,18],[2,20],[2,48],[-2,48],[-2,20],[-6,18],
+    [-34,22],[-30,12],[-50,-4],[-42,-8],[-48,-23],[-34,-20],[-30,-28],
+    [-15,-15],[-19,-38],[-9,-33]
+  ];
+  const leafPath = new Path2D();
+  PTS.forEach(([x, y], i) => i ? leafPath.lineTo(x, y) : leafPath.moveTo(x, y));
+  leafPath.closePath();
+
+  const veinPath = new Path2D();
+  veinPath.moveTo(0, 20);  veinPath.lineTo(0, -44);
+  veinPath.moveTo(0, 10);  veinPath.lineTo(40, -18);
+  veinPath.moveTo(0, 10);  veinPath.lineTo(-40, -18);
+  veinPath.moveTo(0, 16);  veinPath.lineTo(26, 14);
+  veinPath.moveTo(0, 16);  veinPath.lineTo(-26, 14);
+
+  let W = 0, H = 0, dpr = 1, leaves = [];
+  const rand = (a, b) => a + Math.random() * (b - a);
+
+  function makeLeaf(initial) {
+    const depth = Math.random();               // 0 = far, 1 = near
+    const size = 14 + depth * 26;              // px
+    const c = PALETTE[Math.floor(Math.random() * PALETTE.length)];
+    return {
+      x: rand(-50, W + 50),
+      y: initial ? rand(-H, H) : rand(-120, -40),
+      size,
+      depth,
+      color: c,
+      vy: 0.35 + depth * 0.9 + Math.random() * 0.3,
+      swayAmp: rand(0.4, 1.4),
+      swaySpeed: rand(0.008, 0.02),
+      swayPhase: rand(0, Math.PI * 2),
+      rot: rand(0, Math.PI * 2),
+      vr: rand(-0.02, 0.02),
+      flip: rand(0, Math.PI * 2),
+      vflip: rand(0.01, 0.04),
+      alpha: 0.55 + depth * 0.45
+    };
+  }
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const target = Math.round(Math.min(90, Math.max(25, (W * H) / 22000)));
+    while (leaves.length < target) leaves.push(makeLeaf(true));
+    leaves.length = target;
+    leaves.sort((a, b) => a.depth - b.depth); // draw far leaves first
+  }
+
+  function drawLeaf(l) {
+    const s = l.size / 100;
+    const flipX = Math.cos(l.flip);            // 3D tumble effect
+    ctx.save();
+    ctx.globalAlpha = l.alpha;
+    ctx.translate(l.x, l.y);
+    ctx.rotate(l.rot);
+    ctx.scale(s * (0.25 + 0.75 * Math.abs(flipX)), s);
+
+    const g = ctx.createLinearGradient(-50, -50, 50, 50);
+    g.addColorStop(0, flipX > 0 ? l.color.base : l.color.dark);
+    g.addColorStop(1, flipX > 0 ? l.color.dark : l.color.base);
+    ctx.fillStyle = g;
+    ctx.fill(leafPath);
+
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+    ctx.lineWidth = 1.6;
+    ctx.stroke(veinPath);
+    ctx.restore();
+  }
+
+  let wind = 0, windTarget = 0, tick = 0;
+
+  function step() {
+    tick++;
+    if (tick % 300 === 0) windTarget = rand(-0.6, 0.9);
+    wind += (windTarget - wind) * 0.005;
+
+    ctx.clearRect(0, 0, W, H);
+    for (let i = 0; i < leaves.length; i++) {
+      const l = leaves[i];
+      l.swayPhase += l.swaySpeed;
+      l.x += Math.sin(l.swayPhase) * l.swayAmp + wind * (0.5 + l.depth);
+      l.y += l.vy;
+      l.rot += l.vr + Math.sin(l.swayPhase) * 0.005;
+      l.flip += l.vflip;
+
+      if (l.y > H + 60 || l.x < -120 || l.x > W + 120) {
+        const fresh = makeLeaf(false);
+        fresh.depth = l.depth; fresh.size = l.size; // keep draw order stable
+        fresh.vy = 0.35 + l.depth * 0.9 + Math.random() * 0.3;
+        fresh.alpha = l.alpha;
+        leaves[i] = fresh;
+      }
+      drawLeaf(leaves[i]);
+    }
+    requestAnimationFrame(step);
+  }
+
+  window.addEventListener('resize', resize);
+  resize();
+
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    leaves.forEach(drawLeaf);               // static scattered leaves
+  } else {
+    requestAnimationFrame(step);
+  }
+})();
+</script>
+</body>
+</html>
